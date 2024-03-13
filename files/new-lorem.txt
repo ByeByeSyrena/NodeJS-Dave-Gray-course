@@ -1,0 +1,17 @@
+If you have separate tokens for refreshing and accessing resources, the authentication flow would typically involve two types of tokens: access tokens and refresh tokens. Here's how you can adapt the authentication logic to handle both types of tokens:
+Frontend Authentication:
+Upon successful login, store both the access token and the refresh token in the browser's local storage or cookies.
+Send the access token with each request to access protected resources.
+Implement logic to detect when the access token expires (based on the token's expiration time) and automatically request a new access token using the refresh token.
+If the access token is expired, use the refresh token to request a new access token from the server. Store the new access token and continue making requests with it.
+Backend Authentication:
+When a user logs in, generate both an access token and a refresh token.
+Send both tokens back to the client as part of the login response.
+Implement middleware to verify the access token included in incoming requests. This middleware should extract the token from the request headers, verify its authenticity and integrity using the secret key, and attach the decoded user information to the request object.
+For the refresh token, create a separate endpoint (e.g., /refresh-token) that accepts the refresh token and returns a new access token. This endpoint should verify the refresh token's authenticity, generate a new access token if the refresh token is valid, and send it back to the client.
+Checking the Current User:
+On the frontend, use the access token to determine if the user is authenticated and access user-specific content.
+If the access token is expired, use the refresh token to request a new access token from the server.
+On the backend, verify the access token for each incoming request to authenticate the user and attach the decoded user information to the request object.
+Use the user information attached to the request object to perform user-specific actions or return user-related data.
+By separating the access token and refresh token, you can implement a more secure and efficient authentication mechanism that reduces the risk associated with long-lived access tokens and provides a way to refresh access tokens without requiring the user to log in again.
