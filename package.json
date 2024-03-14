@@ -18,7 +18,9 @@
   },
   "homepage": "https://github.com/ByeByeSyrena/NodeJS-Dave-Gray-course#readme",
   "dependencies": {
+    "cors": "^2.8.5",
     "date-fns": "^3.4.0",
+    "express": "^4.18.3",
     "uuid": "^9.0.1"
   },
   "devDependencies": {

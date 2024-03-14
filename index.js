@@ -1,151 +1,116 @@
-const http = require("http");
-const path = require("path");
-const fs = require("fs");
-const fsPromises = require("fs").promises;
-
-const logEvents = require("./logEvents");
-const EventEmitter = require("events");
-
-class Emitter extends EventEmitter {}
-
-const myEmitter = new Emitter();
-
-myEmitter.on("log", (msg, fileName) => logEvents(msg, fileName));
+const express = require("express");
+const app = express();
+const cors = require("cors");
 const PORT = process.env.PORT || 3500;
 
-const serveFile = async (filePath, contentType, response) => {
-  try {
-    const rawData = await fsPromises.readFile(
-      filePath,
-      contentType.includes("image") ? null : "utf8"
-    );
-    const data =
-      contentType === "application/json" ? JSON.parse(rawData) : rawData;
-    response.writeHead(filePath.includes("404.html") ? 404 : 200, {
-      "Content-Type": contentType,
-    });
-    response.end(
-      contentType === "application/json" ? JSON.stringify(data) : data
-    );
-  } catch (err) {
-    console.log(err);
-    myEmitter.emit("log", `${err.name}: ${err.message}`, "errLog.txt");
+const { logger } = require("./middleware/logEvents");
+const errorHandler = require("./middleware/errorHandler");
 
-    response.statusCode = 500;
-    response.end();
-  }
-};
+const path = require("path");
 
-const server = http.createServer((req, res) => {
-  console.log(req.url, req.method);
+//custom middleware for to listen to events
+app.use(logger);
 
-  myEmitter.emit("log", `${req.url}\t${req.method}`, "reqLog.txt");
+const whitelist = [
+  "https://www.google.com",
+  "http://127:0:0:1:5500",
+  "http://localhost:3500",
+];
 
-  const extension = path.extname(req.url);
-
-  let contentType;
-
-  switch (extension) {
-    case ".css":
-      contentType = "text/css";
-      break;
-    case ".js":
-      contentType = "text/javascript";
-      break;
-    case ".json":
-      contentType = "application/json";
-      break;
-    case ".jpg":
-      contentType = "image/jpeg";
-      break;
-    case ".jpeg":
-      contentType = "image/jpeg";
-      break;
-    case ".png":
-      contentType = "image/png";
-      break;
-    case ".gif":
-      contentType = "image/gif";
-      break;
-    case ".html":
-      contentType = "text/html";
-      break;
-    case ".xml":
-      contentType = "application/xml";
-      break;
-    case ".svg":
-      contentType = "image/svg+xml";
-      break;
-    case ".txt":
-      contentType = "text/plain";
-      break;
-    default:
-      //Default to binary data
-      // contentType = "application/octet-stream";
-      contentType = "text/html";
-  }
-
-  let filePath =
-    contentType === "text/html" && req.url === "/"
-      ? path.join(__dirname, "views", "index.html")
-      : contentType === "text/html" && (req.url === req.url.slice(-1)) === "/"
-      ? path.join(__dirname, "views", req.url, "index.html")
-      : contentType === "text/html"
-      ? path.join(__dirname, "views", req.url)
-      : path.join(__dirname, req.url);
-
-  //makes .html extension not required in the browser
-  if (!extension && req.url.slice(-1) !== "/") filePath += ".html";
-
-  const fileExists = fs.existsSync(filePath);
-
-  if (fileExists) {
-    serveFile(filePath, contentType, res);
-  } else {
-    switch (path.parse(filePath).base) {
-      case "old-page.html":
-        res.writeHead(301, { Location: "/new-page.html" });
-        res.end();
-        break;
-      case "www-page.html":
-        res.writeHead(301, { Location: "/" });
-        res.end();
-        break;
-      default:
-        serveFile(path.join(__dirname, "views", "404.html"), "text/html", res);
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (whitelist.indexOf(origin) !== -1 || !origin) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
     }
+  },
+  optionsSuccessStatus: 200,
+};
+app.use(cors(corsOptions));
+
+//built-in middleware to handle urlencoded data
+app.use(express.urlencoded({ extended: false }));
+
+//built-in middleware for json
+app.use(express.json());
+
+//serve static files
+app.use(express.static(path.join(__dirname, "/public")));
+app.use("/subdir", express.static(path.join(__dirname, "/public")));
+
+app.use("/", require("./routes/root"));
+app.use("/subdir", require("./routes/subdir"));
+app.use("/employees", require("./routes/api/employees"));
+
+app.all("*", (req, res) => {
+  res.status(404);
+  if (req.accepts("html")) {
+    res.sendFile(path.join(__dirname, "views", "404.html"));
+  } else if (req.accepts("json")) {
+    res.json({ error: "404 Not Found" });
+  } else {
+    res.type("txt").send("404 Not Found");
   }
-  //   let filePath;
-
-  //   switch (req.url) {
-  //     case "/":
-  //       req.statusCode = 200;
-  //       filePath = path.join(__dirname, "views", "index.html");
-  //       fs.readFile(filePath, "utf8", (err, data) => {
-  //         res.end(data);
-  //       });
-  //       break;
-  //   }
-
-  // Not comfortable because you must have written it for each dir and file
-  //   if (req.url === "/" || req.url === "index.html") {
-  //     res.statusCode = 200;
-  //     res.setHeader("Content-Type", "text.html");
-  //     filePath = path.join(__dirname, "views", "index.html");
-  //     fs.readFile(filePath, "utf8", (err, data) => {
-  //       if (err) {
-  //         console.error(err);
-  //         res.statusCode = 500;
-  //         res.end("Internal Server Error");
-  //         return;
-  //       }
-  //       res.end(data);
-  //     });
-  //   }
 });
 
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.use(errorHandler);
 
-//add listener for the log event
-// myEmitter.on("log", (msg) => logEvents(msg));
-// myEmitter.emit("log", "Log event emitted");
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+//place middlewares one by one and root with them just after functions otherwise it does not work
+// const one = (req, res, next) => {
+//   console.log("one");
+//   next();
+// };
+
+// const two = (req, res, next) => {
+//   console.log("two");
+//   next();
+// };
+
+// const three = (req, res, next) => {
+//   console.log("three");
+//   res.send("Finished");
+// };
+
+// app.get("/chain(.html)?", [one, two, three]);
+
+//^ - must begin with
+//$ - must in with
+//| - or
+//(.html)? - optional html
+// app.get("^/$|index(.html)?", (req, res) => {
+//   res.send("Hello World");
+//   res.sendFile("./views/index.html", { root: __dirname });
+//   res.sendFile(path.join(__dirname, "views", "index.html"));
+// });
+
+// app.get("/new-page(.html)?", (req, res) => {
+//   res.sendFile(path.join(__dirname, "views", "new-page.html"));
+// });
+
+// app.get("/old-page(.html)?", (req, res) => {
+//   res.redirect(301, "/new-page.html");
+//302 by default
+// });
+
+//Route handlers
+
+// app.get(
+//   "/hello(.html)?",
+//   (req, res, next) => {
+//     console.log("attempted to load hello.html");
+//     next();
+//   },
+//   (req, res) => {
+//     res.send("Hello world");
+//   }
+// );
+
+//app.use('/')
+// app.get("/*", (req, res) => {
+//   res.status(404).sendFile(path.join(__dirname, "views", "404.html"));
+// });
+
+//app.use - more for middleware, app.all - for routing
