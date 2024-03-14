@@ -2,7 +2,16 @@
   {
     "id": 1,
     "firstname": "Dave",
-    "lastname": "Gray"
+    "lastname": "Gruv"
   },
-  { "id": 2, "firstname": "John", "lastname": "Smith" }
+  {
+    "id": 2,
+    "firstname": "John",
+    "lastname": "Smith"
+  },
+  {
+    "id": 3,
+    "firstname": "Bob",
+    "lastname": "Stone"
+  }
 ]
