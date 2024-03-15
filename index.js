@@ -1,87 +1,60 @@
-// const fs = require("fs");
-const fsPromises = require("fs").promises;
+const express = require("express");
+const app = express();
 const path = require("path");
+const cors = require("cors");
+const corsOptions = require("./config/corsOptions");
+const { logger } = require("./middleware/logEvents");
+const errorHandler = require("./middleware/errorHandler");
+const verifyJWT = require("./middleware/verifyJWT");
+const cookieParser = require("cookie-parser");
+const credentials = require("./middleware/credentials");
 
-const fileOps = async () => {
-  try {
-    const data = await fsPromises.readFile(
-      path.join(__dirname, "files", "starter.txt"),
-      "utf8"
-    );
-    console.log(data);
+const PORT = process.env.PORT || 3500;
 
-    // unlink - delete
-    await fsPromises.unlink(
-      path.join(__dirname, "files", "starter.txt"),
-      "utf8"
-    );
-    await fsPromises.writeFile(
-      path.join(__dirname, "files", "promiseWrite.txt"),
-      data
-    );
-    await fsPromises.appendFile(
-      path.join(__dirname, "files", "promiseWrite.txt"),
-      "\n\nNice to meet you"
-    );
-    await fsPromises.rename(
-      path.join(__dirname, "files", "promiseWrite.txt"),
-      path.join(__dirname, "files", "promiseComplete.txt")
-    );
+// custom middleware logger
+app.use(logger);
 
-    const newData = await fsPromises.readFile(
-      path.join(__dirname, "files", "promiseComplete.txt"),
-      "utf8"
-    );
+// Handle options credentials check - before CORS!
+// and fetch cookies credentials requirement
+app.use(credentials);
 
-    console.log(newData);
-  } catch (err) {
-    console.log(err);
+// Cross Origin Resource Sharing
+app.use(cors(corsOptions));
+
+// built-in middleware to handle urlencoded form data
+app.use(express.urlencoded({ extended: false }));
+
+// built-in middleware for json
+app.use(express.json());
+
+//middleware for cookies
+app.use(cookieParser());
+
+//serve static files
+app.use("/", express.static(path.join(__dirname, "/public")));
+
+// routes
+app.use("/", require("./routes/root"));
+app.use("/register", require("./routes/register"));
+app.use("/auth", require("./routes/auth"));
+app.use("/refresh", require("./routes/refresh"));
+app.use("/logout", require("./routes/logout"));
+
+app.use(verifyJWT);
+app.use("/employees", require("./routes/api/employees"));
+
+app.all("*", (req, res) => {
+  res.status(404);
+  if (req.accepts("html")) {
+    res.sendFile(path.join(__dirname, "views", "404.html"));
+  } else if (req.accepts("json")) {
+    res.json({ error: "404 Not Found" });
+  } else {
+    res.type("txt").send("404 Not Found");
   }
-};
-
-fileOps();
-
-// fs.readFile(
-//   path.join(__dirname, "files", "starter.txt"),
-//   "utf8",
-//   (err, data) => {
-//     if (err) throw err;
-//     console.log(data);
-//   }
-// );
-
-// console.log("Hello...");
-
-// fs.writeFile(
-//   path.join(__dirname, "files", "reply.txt"),
-//   "Nice to meet you",
-//   (err) => {
-//     if (err) throw err;
-//     console.log("Write complete");
-
-//     fs.appendFile(
-//       path.join(__dirname, "files", "reply.txt"),
-//       "\n\nYes it is ",
-//       (err) => {
-//         if (err) throw err;
-//         console.log("Append complete");
-
-//         fs.rename(
-//           path.join(__dirname, "files", "reply.txt"),
-//           path.join(__dirname, "files", "newReply.txt"),
-//           (err) => {
-//             if (err) throw err;
-//             console.log("Rename complete");
-//           }
-//         );
-//       }
-//     );
-//   }
-// );
-
-//exit on uncaught errors
-
-process.on("uncaughtException", (err) => {
-  console.error(`There was an uncaught error: ${err}`);
-  process.exit(1);
 });
+
+app.use(errorHandler);
+
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
