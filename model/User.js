@@ -19,7 +19,7 @@ const userSchema = new Schema(
       type: String,
       required: true,
     },
-    refreshToken: { type: String },
+    refreshToken: { type: [String] },
   },
   { versionKey: false, timestamps: true }
 );
