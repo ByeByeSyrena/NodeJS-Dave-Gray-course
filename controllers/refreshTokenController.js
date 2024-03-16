@@ -1,14 +1,8 @@
-const usersDB = {
-  users: require("../model/users.json"),
-  setUsers: function (data) {
-    this.users = data;
-  },
-};
+const User = require("../model/User");
 
 const jwt = require("jsonwebtoken");
-require("dotenv").config();
 
-const handleRefreshToken = (req, res) => {
+const handleRefreshToken = async (req, res) => {
   // Retrieve cookies from the request
   const cookies = req.cookies;
 
@@ -19,9 +13,7 @@ const handleRefreshToken = (req, res) => {
   const refreshToken = cookies.jwt;
 
   // Find the user associated with the refresh token
-  const foundUser = usersDB.users.find(
-    (person) => person.refreshToken === refreshToken
-  );
+  const foundUser = await User.findOne({ refreshToken }).exec();
 
   // If no user is found, send forbidden response
   if (!foundUser) return res.sendStatus(403); // Forbidden
@@ -31,10 +23,15 @@ const handleRefreshToken = (req, res) => {
     // If there's an error or the decoded username doesn't match the user's username, send forbidden response
     if (err || foundUser.username !== decoded.username)
       return res.sendStatus(403); // Forbidden
-
+    const roles = Object.values(foundUser.roles);
     // Generate a new access token
     const accessToken = jwt.sign(
-      { username: decoded.username },
+      {
+        UserInfo: {
+          username: decoded.username,
+          roles: roles,
+        },
+      },
       process.env.ACCESS_TOKEN_SECRET,
       { expiresIn: "30s" }
     );
