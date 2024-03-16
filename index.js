@@ -5,28 +5,53 @@ const PORT = process.env.PORT || 3500;
 const corsOptions = require("./config/corsOptions");
 const { logger } = require("./middleware/logEvents");
 const errorHandler = require("./middleware/errorHandler");
-
 const path = require("path");
+const fileUpload = require("express-fileupload");
+const { fileExtLimiter } = require("./middleware/fileExtLimiter");
+const { fileSizeLimiter } = require("./middleware/fileSizeLimiter");
+const { filesPayloadExist } = require("./middleware/filesPayloadExist");
 
-//custom middleware for to listen to events
 app.use(logger);
-
 app.use(cors(corsOptions));
-
-//built-in middleware to handle urlencoded data
 app.use(express.urlencoded({ extended: false }));
-
-//built-in middleware for json
 app.use(express.json());
 
-//serve static files
+// Serve static files from the public directory
 app.use(express.static(path.join(__dirname, "/public")));
 app.use("/subdir", express.static(path.join(__dirname, "/public")));
 
-app.use("/", require("./routes/root"));
-app.use("/subdir", require("./routes/subdir"));
-app.use("/employees", require("./routes/api/employees"));
+// Route for serving the HTML file
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
 
+// Route for handling file uploads
+app.post(
+  "/upload",
+  fileUpload({ createParentPath: true }),
+  filesPayloadExist,
+  fileExtLimiter([".png", ".jpg", ".jpeg"]),
+  fileSizeLimiter,
+  (req, res) => {
+    // Log the uploaded files
+    console.log(req.files);
+
+    Object.keys(req.files).forEach((key) => {
+      const filepath = path.join(__dirname, "files", req.files[key].name);
+      req.files[key].mv(filepath, (err) => {
+        if (err) return res.status(500).json({ status: "error", message: err });
+      });
+    });
+
+    // Send JSON response
+    return res.json({
+      status: "success",
+      message: Object.keys(req.files).toString(),
+    });
+  }
+);
+
+// Handle 404 errors
 app.all("*", (req, res) => {
   res.status(404);
   if (req.accepts("html")) {
@@ -38,8 +63,10 @@ app.all("*", (req, res) => {
   }
 });
 
+// Error handling middleware
 app.use(errorHandler);
 
+// Start the server
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
 //place middlewares one by one and root with them just after functions otherwise it does not work
